@@ -1,0 +1,18 @@
+# personal: settings and presets, logs, recordings
+settings.json
+settings.broken-*.json
+*.log
+recordings/
+analyze_recording.py
+*.lnk
+
+# plugins are downloaded by tools/get_plugins.py (most may not be redistributed)
+plugins/*.dll
+
+# build leftovers (the published monitor/bin and tray/bin files are kept)
+__pycache__/
+*.pyc
+obj/
+**/bin/Release/
+**/bin/Debug/
+*.pdb

@@ -1,0 +1,1343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mic Control</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23000'/%3E%3Cpath d='M12 4l7 15h-3.2L12 10.6 8.2 19H5z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  /* Look and feel after the Audeze app: pure black, dark rounded cards, white type, grey descriptions,
+     monochrome controls with a white "on" state, a geometric typeface and one yellow highlight. */
+  @font-face { font-family: "Lexend"; src: url("/fonts/Lexend.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "Lexend Exa"; src: url("/fonts/LexendExa.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+  :root {
+    --bg: #000000;
+    --rail: #0e0e0e;
+    --card: #131313;
+    --card-2: #1a1a1a;
+    --well: #0a0a0a;
+    --line: #232323;
+    --line-2: #2f2f2f;
+    --track: #2c2c2c;
+    --text: #ffffff;
+    --text-2: #e6e6e6;
+    --muted: #b7b7b7;
+    --dim: #8e8e8e;
+    --faint: #555555;
+    --yellow: #ffdd00;
+    --red: #ff2643;
+    --green: #00ea95;
+    --blue: #1a9fff;
+    --radius: 10px;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+    --font: "Lexend", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    --title: "Lexend Exa", "Lexend", "Segoe UI", sans-serif;
+    --mono: "Lexend", "Cascadia Mono", Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--text); font: 400 14px/1.45 var(--font); overflow: hidden; -webkit-font-smoothing: antialiased; }
+  button, select, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+  ::selection { background: #444; }
+
+  .app { display: grid; grid-template-columns: 76px 1fr; grid-template-rows: 1fr auto; height: 100vh; }
+
+  /* ---------- rail ---------- */
+  .rail { grid-row: 1 / 3; background: var(--rail); display: flex; flex-direction: column; align-items: center; padding: 18px 0 14px; gap: 6px; z-index: 3; }
+  .logo { width: 40px; height: 40px; display: grid; place-items: center; margin-bottom: 18px; }
+  .nav { width: 100%; height: 64px; display: grid; place-items: center; background: none; border: 0; color: var(--muted); position: relative; transition: color .2s, background .2s; }
+  .nav:hover { color: var(--text); }
+  .nav[aria-current="page"] { background: #1c1c1c; color: var(--text); }
+  .nav::before { content: ""; position: absolute; left: 0; top: 50%; width: 3px; height: 0; background: var(--text); border-radius: 0 3px 3px 0; transform: translateY(-50%); transition: height .25s var(--ease); }
+  .nav[aria-current="page"]::before { height: 28px; }
+  .nav .tip { position: absolute; left: 72px; background: #222; color: var(--text); padding: 6px 10px; border-radius: 6px; font-size: 12.5px; white-space: nowrap; opacity: 0; pointer-events: none; transform: translateX(-6px); transition: .18s var(--ease); }
+  .nav:hover .tip { opacity: 1; transform: none; }
+  .nav .dot { position: absolute; top: 18px; right: 20px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .rail .spacer { flex: 1; }
+
+  /* ---------- page ---------- */
+  .main { overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+  .head { display: flex; align-items: center; gap: 12px; padding: 22px 28px 14px; flex-wrap: wrap; }
+  .head h1 { font: 500 26px/1.1 var(--title); letter-spacing: .5px; margin: 0 auto 0 0; }
+  .scroll { flex: 1; overflow: auto; padding: 4px 28px 28px; scroll-behavior: smooth; }
+  .scroll::-webkit-scrollbar { width: 10px; }
+  .scroll::-webkit-scrollbar-thumb { background: #262626; border-radius: 10px; border: 3px solid var(--bg); }
+  .page { display: none; }
+  .page.on { display: block; animation: pageIn .32s var(--ease) both; }
+  @keyframes pageIn { from { opacity: 0; transform: translateY(8px); } }
+  .page.on .card { animation: cardIn .42s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(10px) scale(.995); } }
+
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: start; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .span2 { grid-column: 1 / -1; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 22px 24px; min-width: 0; }
+  .card h2 { font: 500 16px/1.2 var(--font); margin: 0 0 4px; }
+  .card .desc, .desc { color: var(--dim); font-size: 13px; margin: 0; }
+  .card-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+  .card-head > div { flex: 1; min-width: 0; }
+  .sec { font: 500 12px/1 var(--font); color: var(--dim); text-transform: uppercase; letter-spacing: 1.2px; margin: 0 0 10px; }
+
+  /* ---------- buttons ---------- */
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 16px; border-radius: 7px; border: 0; background: #262626; color: var(--muted); font-weight: 500; font-size: 13.5px; transition: background .18s, color .18s, transform .12s, opacity .18s; white-space: nowrap; }
+  .btn:hover:not(:disabled) { background: #303030; color: var(--text); }
+  .btn:active:not(:disabled) { transform: scale(.97); }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .btn.white { background: var(--text); color: #000; }
+  .btn.white:hover:not(:disabled) { background: #dcdcdc; color: #000; }
+  .btn.ghost { background: none; }
+  .btn svg { width: 16px; height: 16px; flex: none; }
+  .btn.on { background: var(--text); color: #000; }
+  .apply-glow { position: relative; }
+  .apply-glow:not(:disabled)::after { content: ""; position: absolute; inset: -3px; border-radius: 10px; border: 1px solid rgba(255,255,255,.5); animation: glow 1.8s ease-in-out infinite; pointer-events: none; }
+  @keyframes glow { 50% { opacity: 0; transform: scale(1.06); } }
+  .chip { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 99px; background: #161616; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .chip.ok::before, .chip.warn::before, .chip.bad::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px currentColor; color: var(--green); }
+  .chip.warn::before { background: var(--yellow); color: var(--yellow); }
+  .chip.bad::before { background: var(--red); color: var(--red); }
+
+  /* ---------- toggle (Audeze pill) ---------- */
+  .tg { width: 36px; height: 20px; border-radius: 99px; background: #3a3a3a; border: 0; padding: 0; position: relative; flex: none; transition: background .2s; }
+  .tg::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #161616; transition: transform .22s var(--ease), background .2s; }
+  .tg[aria-checked="true"] { background: var(--text); }
+  .tg[aria-checked="true"]::after { transform: translateX(16px); background: #000; }
+
+  /* ---------- row: title + description + control ---------- */
+  .row { display: flex; align-items: flex-start; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; padding-top: 0; }
+  .row > .txt { flex: 1; min-width: 0; }
+  .row .txt b { display: block; font-weight: 500; font-size: 14.5px; }
+  .row .txt span { color: var(--dim); font-size: 12.5px; }
+  .sub-ctls { display: grid; gap: 14px; margin-top: 14px; transition: opacity .25s; }
+  .off-dim .sub-ctls { opacity: .35; }
+
+  /* ---------- slider (thin track, white thumb, end labels) ---------- */
+  .sl { display: grid; gap: 6px; }
+  .sl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .sl-head span { color: var(--muted); font-size: 13px; }
+  .sl-head output { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text); }
+  .sl input { -webkit-appearance: none; appearance: none; width: 100%; height: 20px; background: transparent; margin: 0; cursor: pointer; --p: 50%; --z: 0%; }
+  .sl input::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(to right, var(--track) 0 min(var(--p), var(--z)), #9a9a9a min(var(--p), var(--z)) max(var(--p), var(--z)), var(--track) max(var(--p), var(--z)) 100%); }
+  .sl input::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 20px; margin-top: -8px; border-radius: 3px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.6); transition: transform .15s var(--ease); }
+  .sl input:active::-webkit-slider-thumb { transform: scaleY(1.12); }
+  .sl-ends { display: flex; justify-content: space-between; color: var(--faint); font-size: 11.5px; margin-top: -2px; }
+  .adv { display: none !important; }
+  body.fine .adv { display: grid !important; }
+
+  /* ---------- segmented (Audeze vertical list, moving white pill) ---------- */
+  .seg { position: relative; display: grid; background: #1b1b1b; border-radius: 8px; padding: 4px; gap: 2px; }
+  .seg.h { grid-auto-flow: column; grid-auto-columns: 1fr; }
+  .seg button { position: relative; z-index: 1; height: 28px; border: 0; background: none; color: var(--muted); font-size: 13px; border-radius: 6px; transition: color .22s; }
+  .seg button[aria-pressed="true"] { color: #000; }
+  .seg button:disabled { opacity: .35; cursor: default; }
+  .seg .pill { position: absolute; z-index: 0; left: 0; top: 0; border-radius: 6px; background: var(--text); transition: transform .28s var(--ease), width .28s var(--ease), height .28s var(--ease), opacity .2s; }
+
+  /* ---------- big dial (Game/Chat mix look) ---------- */
+  .dial-wrap { display: grid; justify-items: center; gap: 6px; padding: 6px 0 4px; }
+  .dial { width: 220px; height: 220px; touch-action: none; cursor: ns-resize; position: relative; user-select: none; }
+  .dial svg { width: 100%; height: 100%; overflow: visible; }
+  .dial .val { position: absolute; inset: 0; display: grid; place-items: center; font: 400 26px/1 var(--title); letter-spacing: 1px; font-variant-numeric: tabular-nums; pointer-events: none; }
+  .dial-ends { display: flex; justify-content: space-between; width: 230px; color: var(--dim); font-size: 12.5px; margin-top: -26px; }
+
+  /* ---------- vertical faders (Audeze EQ page) ---------- */
+  .faders { display: grid; grid-template-columns: 34px repeat(var(--n), minmax(0, 1fr)); gap: 0 6px; height: 270px; margin-top: 8px; }
+  .scale { display: flex; flex-direction: column; justify-content: space-between; color: var(--dim); font-size: 11.5px; padding: 20px 0 28px; text-align: right; }
+  .fader { display: grid; grid-template-rows: 18px 1fr 22px; justify-items: center; gap: 6px; min-width: 0; }
+  .fader .fv { color: var(--dim); font-size: 11.5px; font-variant-numeric: tabular-nums; transition: color .2s; }
+  .fader .ff { color: var(--dim); font-size: 11.5px; white-space: nowrap; display: grid; justify-items: center; gap: 1px; }
+  .fader .ff b { color: var(--soft, #e6e6e6); font-weight: 500; font-size: 12.5px; }
+  .fader .slot { position: relative; width: 100%; display: flex; justify-content: center; cursor: ns-resize; touch-action: none; }
+  .fader .slot::before { content: ""; position: absolute; inset: 0 auto 0 50%; width: 10px; transform: translateX(-50%); background: repeating-linear-gradient(to bottom, transparent 0 calc(12.5% - 1px), #2a2a2a calc(12.5% - 1px) 12.5%); opacity: .6; }
+  .fader .bar { position: relative; width: 8px; border-radius: 4px; background: #262626; overflow: hidden; }
+  .fader .fill { position: absolute; left: 0; right: 0; bottom: 0; background: #cfcfcf; border-radius: 4px; transition: height .12s linear; }
+  .fader.active .fill { background: #fff; }
+  .fader.active .fv { color: var(--text); }
+  .fader:hover .fill { background: #e9e9e9; }
+
+  /* ---------- EQ curve ---------- */
+  #curve { width: 100%; height: 190px; display: block; border-radius: 8px; background: var(--well); touch-action: none; }
+
+  /* ---------- presets list (Audeze left column) ---------- */
+  .presets { position: sticky; top: 0; }
+  .plist { display: grid; gap: 6px; margin-bottom: 18px; }
+  .pitem { display: flex; align-items: center; height: 34px; padding: 0 12px; border-radius: 6px; background: #1c1c1c; color: var(--text-2); font-size: 13.5px; border: 0; text-align: left; width: 100%; transition: background .18s, color .18s; position: relative; }
+  .pitem:hover { background: #262626; }
+  .pitem[aria-pressed="true"] { background: #2e2e2e; color: var(--text); }
+  .pitem[aria-pressed="true"]::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--yellow); }
+  .pitem .x { margin-left: auto; opacity: 0; color: var(--dim); padding: 4px; border-radius: 4px; transition: opacity .15s, color .15s; }
+  .pitem:hover .x { opacity: 1; }
+  .pitem .x:hover { color: var(--red); }
+  .save-row { display: flex; gap: 6px; }
+  .save-row input { flex: 1; min-width: 0; height: 34px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--well); padding: 0 10px; font-size: 13px; }
+  .save-row input::placeholder { color: var(--faint); }
+
+  /* ---------- rack ---------- */
+  .rack { display: grid; gap: 10px; }
+  .slot-card { background: var(--card-2); border-radius: 8px; overflow: hidden; animation: slotIn .3s var(--ease) both; }
+  @keyframes slotIn { from { opacity: 0; transform: translateY(-6px); } }
+  .slot-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+  .slot-head .num { width: 22px; height: 22px; border-radius: 6px; background: #262626; display: grid; place-items: center; font-size: 11.5px; color: var(--dim); flex: none; }
+  .slot-head .nm { flex: 1; min-width: 0; }
+  .slot-head .nm b { font-weight: 500; display: block; }
+  .slot-head .nm span { font-size: 12px; color: var(--dim); }
+  .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: 0; background: none; color: var(--dim); display: grid; place-items: center; transition: background .15s, color .15s; }
+  .icon-btn:hover:not(:disabled) { background: #2a2a2a; color: var(--text); }
+  .icon-btn:disabled { opacity: .3; cursor: default; }
+  .icon-btn svg { width: 16px; height: 16px; }
+  .chev { transition: transform .25s var(--ease); }
+  .open .chev { transform: rotate(180deg); }
+  .slot-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s var(--ease); }
+  .open .slot-body { grid-template-rows: 1fr; }
+  .slot-body > div { overflow: hidden; }
+  .slot-params { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px 22px; padding: 4px 16px 18px; }
+  .slot-more { padding: 0 16px 14px; }
+  .slot-card.disabled .slot-params { opacity: .4; }
+  .sel { height: 32px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--well); padding: 0 8px; width: 100%; }
+  .add-fx { width: 100%; height: 48px; border-radius: 8px; border: 1px dashed #3a3a3a; background: none; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 8px; transition: border-color .18s, color .18s, background .18s; }
+  .add-fx:hover { border-color: #777; color: var(--text); background: #111; }
+  .empty { color: var(--faint); font-size: 13px; padding: 4px 0 12px; }
+
+  /* ---------- modal ---------- */
+  .modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0,0,0,.7); backdrop-filter: blur(4px); animation: fade .2s ease both; }
+  @keyframes fade { from { opacity: 0; } }
+  .modal-panel { width: min(880px, calc(100vw - 48px)); max-height: calc(100vh - 80px); overflow: auto; background: var(--card); border-radius: 14px; padding: 24px 26px; animation: pop .28s var(--ease) both; }
+  @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+  .modal h3 { font: 500 20px/1.2 var(--title); margin: 0 0 4px; }
+  .fx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 10px 0 20px; }
+  .fx-card { text-align: left; border: 0; border-radius: 10px; background: var(--card-2); padding: 14px 16px; display: grid; gap: 4px; transition: background .18s, transform .18s var(--ease); }
+  .fx-card:hover { background: #242424; transform: translateY(-2px); }
+  .fx-card b { font-weight: 500; }
+  .fx-card .vendor { font-size: 12px; color: var(--dim); }
+  .fx-card .what { font-size: 12.5px; color: var(--muted); }
+
+  /* ---------- banners ---------- */
+  .banner { display: flex; gap: 16px; align-items: center; background: #1a1505; border: 1px solid #4a3d05; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; animation: cardIn .35s var(--ease) both; }
+  .banner.bad { background: #1d0709; border-color: #4f1119; }
+  .banner > div { flex: 1; }
+  .banner b { display: block; font-weight: 500; }
+  .banner p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+  /* ---------- status bar (Audeze bottom row) ---------- */
+  .status { grid-column: 2; display: flex; align-items: center; gap: 18px; padding: 10px 28px 12px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+  .st { display: inline-flex; align-items: center; gap: 8px; background: none; border: 0; padding: 4px 2px; color: var(--muted); border-radius: 6px; white-space: nowrap; transition: color .18s; }
+  button.st:hover { color: var(--text); }
+  .st svg { width: 17px; height: 17px; flex: none; }
+  .st.hot { color: var(--text); }
+  .st.red, .st.red svg { color: var(--red); }
+  .st .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .st .lamp.warn { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+  .st .lamp.bad { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .grow { flex: 1; }
+  .meter { display: grid; gap: 3px; width: 150px; }
+  .meter i { display: block; height: 4px; border-radius: 4px; background: #1d1d1d; overflow: hidden; position: relative; }
+  .meter i b { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 4px; background: linear-gradient(90deg, #8a8a8a 0 70%, var(--yellow) 85%, var(--red) 100%); background-size: 150px 100%; will-change: width; }
+
+  #toast { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%) translateY(14px); opacity: 0; transition: .28s var(--ease); background: #1f1f1f; color: var(--text); padding: 10px 16px; border-radius: 8px; pointer-events: none; z-index: 30; box-shadow: 0 12px 30px rgba(0,0,0,.6); max-width: calc(100vw - 40px); font-size: 13.5px; }
+  #toast.show { opacity: 1; transform: translateX(-50%); }
+  #offline { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: grid; place-items: center; z-index: 40; text-align: center; animation: fade .3s both; }
+
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 10px 18px; font-size: 13.5px; }
+  .kv span { color: var(--dim); }
+  .plug-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+  .plug-list div { background: var(--card-2); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .plug-list span { display: block; color: var(--dim); font-size: 12px; }
+
+  @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } .presets { position: static; } }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .app { grid-template-columns: 60px 1fr; } .head, .scroll, .status { padding-left: 16px; padding-right: 16px; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Pages">
+    <div class="logo" aria-hidden="true">
+      <svg width="30" height="30" viewBox="0 0 24 24"><path d="M12 3l8 17h-3.6L12 10.2 7.6 20H4z" fill="#fff"/><path d="M9.4 15.8h5.2" stroke="#000" stroke-width="1.6"/></svg>
+    </div>
+    <button class="nav" data-go="mic" aria-label="Mic">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+      <span class="tip">Mic</span><span class="dot" id="micDot" hidden></span>
+    </button>
+    <button class="nav" data-go="guitar" aria-label="Guitar">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10l6-6M18 2l4 4"/><path d="M11.5 9.5c-1.6-1.2-4-1-5.5.6-1 1-1.2 2.3-.9 3.4-1.6.4-2.6 1.6-2.6 3.1 0 2.1 1.8 3.4 3.6 3.4 1.5 0 2.7-1 3.1-2.6 1.1.3 2.4.1 3.4-.9 1.6-1.5 1.8-3.9.6-5.5z"/><circle cx="8.5" cy="15.5" r="1.3"/></svg>
+      <span class="tip">Guitar</span>
+    </button>
+    <button class="nav" data-go="settings" aria-label="Settings">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      <span class="tip">Settings</span><span class="dot" id="setDot" hidden></span>
+    </button>
+    <div class="spacer"></div>
+    <button class="nav" data-go="help" aria-label="Help">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8M12 17.2v.1"/></svg>
+      <span class="tip">Help</span>
+    </button>
+  </nav>
+
+  <div class="main">
+    <header class="head">
+      <h1 id="title">Mic</h1>
+      <span class="chip" id="latChip" title="Delay the plugins add. Under ~30 ms nobody notices.">0 ms</span>
+      <button class="btn" id="abBtn" title="Hear the untouched mic (everyone hears it), click again to go back">A/B original</button>
+      <button class="btn" id="revertBtn" disabled>Revert</button>
+      <button class="btn white apply-glow" id="applyBtn" disabled title="Ctrl+S">Apply</button>
+    </header>
+    <div class="scroll" id="scroll">
+      <div id="banners"></div>
+
+      <!-- ===================== MIC ===================== -->
+      <section class="page" data-page="mic">
+        <div class="layout">
+          <aside class="card presets" style="--i:0">
+            <p class="sec">Presets</p>
+            <div class="plist" id="micBuiltins"></div>
+            <p class="sec">Custom</p>
+            <div class="plist" id="micCustom"></div>
+            <div class="save-row"><input id="micPresetName" maxlength="40" placeholder="Name this sound"><button class="btn" id="micSave">Save</button></div>
+          </aside>
+          <div class="grid">
+            <section class="card" style="--i:1">
+              <div class="card-head"><div><h2>Mic boost</h2><p class="desc">Software gain on top of the Focusrite knob, before everything else.</p></div><button class="tg" data-switch="enabled" role="switch" aria-label="All effects" title="All effects on or off"></button></div>
+              <div class="dial-wrap" id="boostDial"></div>
+              <div class="row" style="margin-top:18px"><div class="txt"><b>Plugged into</b><span id="routeHint">Where your PodMic is on the Focusrite.</span></div></div>
+              <div class="seg h" id="routeSeg"></div>
+            </section>
+
+            <section class="card" style="--i:2">
+              <div class="card-head"><div><h2>Noise suppression</h2><p class="desc">AI removes fans, keyboard and room noise from your voice (RNNoise).</p></div></div>
+              <div class="seg" id="denoiseSeg"></div>
+              <div style="margin-top:18px">
+                <div class="row" data-dim="lowcut.on"><div class="txt"><b>Low cut</b><span>Removes rumble, desk bumps and pops below this.</span><div class="sub-ctls" id="lowcutCtl"></div></div><button class="tg" data-switch="lowcut.on" role="switch" aria-label="Low cut"></button></div>
+                <div class="row" data-dim="gate.on"><div class="txt"><b>Noise gate</b><span>Turns the room down whenever you stop talking.</span><div class="sub-ctls" id="gateCtl"></div></div><button class="tg" data-switch="gate.on" role="switch" aria-label="Noise gate"></button></div>
+              </div>
+            </section>
+
+            <section class="card span2" style="--i:3">
+              <div class="card-head"><div><h2>Voice tone</h2><p class="desc">What makes a deep podcast voice. Bass and Clarity move the Bass and Presence faders below.</p></div></div>
+              <div class="grid" style="gap:18px 34px">
+                <div id="toneCtl" style="display:grid;gap:16px;align-content:start"></div>
+                <div class="row" data-dim="warmth.on" style="border:0;padding-top:0"><div class="txt"><b>Warmth</b><span>Analog-style saturation (TDR SlickEQ "Deep" stage): weight and density at the same loudness, no added delay.</span><div class="sub-ctls" id="warmCtl"></div></div><button class="tg" data-switch="warmth.on" role="switch" aria-label="Warmth"></button></div>
+              </div>
+            </section>
+
+            <section class="card span2" style="--i:4">
+              <div class="card-head"><div><h2>Equalizer</h2><p class="desc">Drag the dots or the faders. Double-click to reset. Your voice shows in the background when the meter is on.</p></div>
+                <label class="btn ghost" style="gap:10px"><button class="tg" id="fineTg" role="switch" aria-label="Fine-tune"></button>Fine-tune</label></div>
+              <canvas id="curve" aria-label="EQ curve"></canvas>
+              <div class="faders" id="eqFaders"></div>
+              <div class="grid adv" id="eqFine" style="margin-top:18px"></div>
+              <div class="row" data-dim="hicut.on" style="margin-top:14px"><div class="txt"><b>Hiss cut</b><span>Rolls off hiss and fizz above this.</span><div class="sub-ctls" id="hicutCtl"></div></div><button class="tg" data-switch="hicut.on" role="switch" aria-label="Hiss cut"></button></div>
+            </section>
+
+            <section class="card span2" style="--i:4">
+              <div class="card-head"><div><h2>Dynamics</h2><p class="desc">TDR Kotelnikov compressor, TDR Nova de-esser and LoudMax limiter.</p></div></div>
+              <div class="grid" style="gap:0 34px">
+                <div class="row" data-dim="comp.on" style="border:0;padding-top:0"><div class="txt"><b>Compressor</b><span>Evens out your level. The podcast sound.</span><div class="sub-ctls" id="compCtl"></div></div><button class="tg" data-switch="comp.on" role="switch" aria-label="Compressor"></button></div>
+                <div style="display:grid">
+                  <div class="row" data-dim="deesser.on" style="border:0;padding-top:0"><div class="txt"><b>De-esser</b><span>Softens sharp S sounds only while you say them.</span><div class="sub-ctls" id="deessCtl"></div></div><button class="tg" data-switch="deesser.on" role="switch" aria-label="De-esser"></button></div>
+                  <div class="row" data-dim="limiter.on"><div class="txt"><b>Limiter</b><span>A hard ceiling with true-peak detection, so nothing ever clips.</span><div class="sub-ctls" id="limCtl"></div></div><button class="tg" data-switch="limiter.on" role="switch" aria-label="Limiter"></button></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="card span2" style="--i:5">
+              <div class="card-head"><div><h2>Effects</h2><p class="desc">Reverbs, delays, voice effects and more, in order from top to bottom. Every knob of every plugin is here.</p></div></div>
+              <div class="rack" id="micRack"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== GUITAR ===================== -->
+      <section class="page" data-page="guitar">
+        <div class="layout">
+          <aside class="card presets" style="--i:0">
+            <p class="sec">Presets</p>
+            <div class="plist" id="gBuiltins"></div>
+            <p class="sec">Custom</p>
+            <div class="plist" id="gCustom"></div>
+            <div class="save-row"><input id="gPresetName" maxlength="40" placeholder="Name this guitar sound"><button class="btn" id="gSave">Save</button></div>
+          </aside>
+          <div class="grid" id="gGrid">
+            <section class="card" style="--i:1">
+              <div class="card-head"><div><h2>Guitar</h2><p class="desc">Electric guitar on Input 2 with the INST button on, mixed in with your voice for every app.</p></div><button class="tg" id="gOnTg" role="switch" aria-label="Guitar on"></button></div>
+              <div class="dial-wrap" id="gBoostDial"></div>
+              <div id="gLevelCtl" style="margin-top:18px"></div>
+            </section>
+            <section class="card" style="--i:2">
+              <div class="card-head"><div><h2>Clean-up</h2><p class="desc">Keep hum and buzz out between notes.</p></div></div>
+              <div class="row" data-dim="guitar.gate.on"><div class="txt"><b>Noise gate</b><span>Mute the strings and set it just above the hum.</span><div class="sub-ctls" id="gGateCtl"></div></div><button class="tg" data-switch="guitar.gate.on" role="switch" aria-label="Guitar noise gate"></button></div>
+              <div class="row"><div class="txt"><b>Low cut</b><span>Tightens the low end.</span><div class="sub-ctls" id="gLowCtl"></div></div></div>
+              <div class="row" data-dim="guitar.comp.on"><div class="txt"><b>Sustain</b><span>Compression: notes ring longer and even out (TDR Kotelnikov).</span><div class="sub-ctls" id="gSusCtl"></div></div><button class="tg" data-switch="guitar.comp.on" role="switch" aria-label="Sustain"></button></div>
+            </section>
+            <section class="card span2" style="--i:3">
+              <div class="card-head"><div><h2>Amp tone</h2><p class="desc">The knobs of an amp. Tone rolls off the harsh top of a direct guitar.</p></div></div>
+              <div class="faders" id="gFaders"></div>
+              <div id="gToneCtl" style="margin-top:12px"></div>
+            </section>
+            <section class="card span2" style="--i:4">
+              <div class="card-head"><div><h2>Effects</h2><p class="desc">Overdrive, reverbs, delays and more for the guitar only.</p></div></div>
+              <div class="rack" id="gRack"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SETTINGS ===================== -->
+      <section class="page" data-page="settings">
+        <div class="grid">
+          <section class="card" style="--i:0">
+            <h2>Microphone</h2><p class="desc" style="margin-bottom:16px">The Windows input Mic Control works on.</p>
+            <select class="sel" id="deviceSel"></select>
+            <div class="kv" style="margin-top:16px" id="devInfo"></div>
+            <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="sound">Windows sound settings</button></div>
+          </section>
+          <section class="card" style="--i:1">
+            <h2>Equalizer APO</h2><p class="desc" style="margin-bottom:16px">The Windows audio engine that runs everything for every app.</p>
+            <div class="kv" id="apoInfo"></div>
+            <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="setup">Open Device Selector</button><button class="btn" data-act="hook">Reconnect</button></div>
+          </section>
+          <section class="card" style="--i:2">
+            <h2>Monitor</h2><p class="desc" style="margin-bottom:16px">Hear yourself, exactly as apps hear you. Plays where you pick here, with the test recording. Use headphones.</p>
+            <select class="sel" id="outSel"></select>
+            <div class="seg h" style="margin-top:14px" id="monModeSeg"></div>
+            <p class="desc" style="margin-top:8px;font-size:12.5px" id="monModeDesc"></p>
+            <div id="monVolCtl" style="margin-top:6px"></div>
+            <div class="kv" style="margin-top:14px" id="monInfo"></div>
+          </section>
+          <section class="card" style="--i:3">
+            <h2>App</h2><p class="desc" style="margin-bottom:12px">Mic Control lives in the tray, next to the clock. Minimize or close this window and it keeps running: your sound, mute and monitor stay on. Click the tray icon to come back, right-click it to mute, monitor or quit.</p>
+            <div class="row" style="border:0;padding-bottom:0"><div class="txt"><b>Start with Windows</b><span>Starts quietly in the tray when you log in. Your sound works in every app either way.</span></div><button class="tg" id="autoTg" role="switch" aria-label="Start with Windows"></button></div>
+          </section>
+          <section class="card" style="--i:4">
+            <h2>Tips</h2>
+            <p class="desc" style="margin-bottom:10px">For guitar, zero delay: the Focusrite's <b>Direct Monitor</b> button plays the dry inputs straight to its headphone jack. Turn it off while using Monitor here, or you hear both. Wired headphones beat wireless ones, which add their own delay on top.</p>
+            <p class="desc">Keep the Focusrite gain knob and your distance to the PodMic the same, since the presets depend on them. Talk into the top of the PodMic, 3 to 5 cm away. Leave the Windows recording level at 100%, and turn off "automatically adjust microphone" in Discord, Teams and Zoom.</p>
+          </section>
+          <section class="card span2" style="--i:4">
+            <h2>Plugins</h2><p class="desc" style="margin-bottom:16px">Free, top-tier plugins, all running inside Windows.</p>
+            <div class="plug-list" id="plugList"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ===================== HELP ===================== -->
+      <section class="page" data-page="help">
+        <div class="grid">
+          <section class="card" style="--i:0"><h2>How it works</h2><p class="desc">Everything here runs inside Windows' audio engine (Equalizer APO) on the Focusrite input. Discord, OBS, games and every other app get the finished sound, even with this window closed.</p></section>
+          <section class="card" style="--i:1"><h2>Preview and Apply</h2><p class="desc">Changes play live while you tweak. <b>Apply</b> keeps them. <b>Revert</b> or closing the window without Apply puts back the last applied sound. Mute and the Guitar switch work instantly.</p></section>
+          <section class="card" style="--i:2"><h2>Hear yourself</h2><p class="desc"><b>Monitor</b> in the bottom bar plays your mic and guitar, exactly as apps hear them, into your headphones with the lowest delay Windows allows (Settings shows it). <b>Test</b> records 5 seconds and plays it back, which is the best way to judge your sound.</p></section>
+          <section class="card" style="--i:3"><h2>Order of the effects</h2><p class="desc">Mic: boost → low cut → AI noise suppression → gate → EQ → warmth → de-esser → compressor → your effects → limiter. Guitar: boost → low cut → gate → amp tone → sustain → your effects, then mixed with your voice.</p></section>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="status">
+    <span class="st" id="stDevice" title="Microphone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/></svg><span>Focusrite</span></span>
+    <span class="st" id="stLive"><i class="lamp"></i><span>Live in every app</span></span>
+    <button class="st" id="stMute" title="Mute the mic for every app"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><span>Mute Off</span></button>
+    <button class="st" id="stGuitar" title="Guitar on Input 2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10l6-6M18 2l4 4"/><path d="M11.5 9.5c-1.6-1.2-4-1-5.5.6-1 1-1.2 2.3-.9 3.4-1.6.4-2.6 1.6-2.6 3.1 0 2.1 1.8 3.4 3.6 3.4 1.5 0 2.7-1 3.1-2.6 1.1.3 2.4.1 3.4-.9 1.6-1.5 1.8-3.9.6-5.5z"/></svg><span>Guitar Off</span></button>
+    <span class="grow"></span>
+    <div class="meter" title="What apps hear"><i><b id="mL"></b></i><i><b id="mR"></b></i></div>
+    <span class="st" id="peak" style="width:64px;justify-content:flex-end">−∞</span>
+    <button class="st" id="stMonitor" title="Hear yourself in your headphones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/></svg><span>Monitor</span></button>
+    <button class="st" id="stTest" title="Record 5 seconds and play them back"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg><span>Test</span></button>
+  </footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="offline" hidden><div><h2 style="font:500 22px var(--title)">Mic Control stopped</h2><p class="desc">Close this window and open Mic Control again.</p></div></div>
+
+<script>
+'use strict';
+// ============================================================== basics
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('mc2.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('mc2.' + k, JSON.stringify(v)); } catch {} },
+};
+const getPath = (o, p) => p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
+const setPath = (o, p, v) => { const ks = p.split('.'); const last = ks.pop(); ks.reduce((a, k) => a[k], o)[last] = v; };
+
+let state = null, cur = null, bypass = false, catalog = {};
+// Every control registers a "sync" function that redraws it from the settings. Controls inside an
+// effects rack register into that rack's own list, which is thrown away when the rack is rebuilt.
+const syncers = [];
+let syncTarget = syncers;
+const addSync = (fn) => syncTarget.push(fn);
+const fmtDb = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' dB';
+const fmtHz = (v) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 1 : 2).replace(/\.?0+$/, '') + ' kHz' : Math.round(v) + ' Hz';
+const fmtMs = (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + ' ms';
+const roundHz = (v) => { const s = v < 200 ? 1 : v < 1000 ? 5 : 50; return Math.round(v / s) * s; };
+const roundMs = (v) => v < 10 ? Math.round(v * 10) / 10 : v < 100 ? Math.round(v) : Math.round(v / 5) * 5;
+
+// ============================================================== API
+async function api(path, body) {
+  // never wait forever: a request the engine doesn't answer in 12 s fails (and is retried where it matters)
+  const opts = { headers: { 'X-Mic-Control': '1' }, signal: AbortSignal.timeout(12000) };
+  if (body !== undefined) { opts.method = 'POST'; opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+// ============================================================== controls
+// slider: spec = {path | get/set, min, max, step | log, round, fmt, label, ends?, center?, def}
+function slider(container, spec) {
+  const el = document.createElement('div');
+  el.className = 'sl' + (spec.adv ? ' adv' : '');
+  el.innerHTML = `<div class="sl-head"><span>${esc(spec.label)}</span><output></output></div><input type="range" aria-label="${esc(spec.label)}"><div class="sl-ends"><span></span><span></span></div>`;
+  const input = $('input', el), out = $('output', el), ends = $$('.sl-ends span', el);
+  const N = 1000;
+  const get = spec.get || (() => getPath(cur, spec.path));
+  const put = spec.set || ((v) => setPath(cur, spec.path, v));
+  if (spec.log || spec.table) { input.min = 0; input.max = N; input.step = 1; } else { input.min = spec.min; input.max = spec.max; input.step = spec.step; }
+  const toPos = (v) => spec.table ? v * N : spec.log ? N * Math.log(v / spec.min) / Math.log(spec.max / spec.min) : v;
+  const fromPos = (p) => spec.table ? p / N : spec.log ? (spec.round || roundHz)(spec.min * Math.pow(spec.max / spec.min, p / N)) : Math.round(p / spec.step) * spec.step;
+  const pct = (v) => (spec.table ? v : spec.log ? toPos(v) / N : (v - spec.min) / (spec.max - spec.min)) * 100;
+  ends[0].textContent = spec.ends ? spec.ends[0] : spec.fmt(spec.min);
+  ends[1].textContent = spec.ends ? spec.ends[1] : spec.fmt(spec.max);
+  const set = (v) => { put(spec.table ? clamp(v, 0, 1) : clamp(+(+v).toFixed(3), spec.min, spec.max)); spec.quiet ? sync() : changed(); };
+  input.addEventListener('input', () => set(fromPos(+input.value)));
+  input.addEventListener('dblclick', () => spec.def !== undefined && set(spec.def));
+  const sync = () => {
+    const v = get();
+    if (v === undefined) return;
+    if (document.activeElement !== input || !input.matches(':active')) input.value = toPos(v);
+    out.textContent = spec.fmt(v);
+    const z = spec.center !== undefined ? pct(spec.center) : 0;
+    input.style.setProperty('--p', pct(v) + '%');
+    input.style.setProperty('--z', z + '%');
+  };
+  addSync(sync);
+  container.appendChild(el);
+  return { el, sync };
+}
+
+function switchFor(btn, path, onClick) {
+  btn.addEventListener('click', onClick || (() => { setPath(cur, path, !getPath(cur, path)); changed(); }));
+  addSync(() => {
+    const on = !!getPath(cur, path);
+    btn.setAttribute('aria-checked', String(on));
+    const row = btn.closest('[data-dim]');
+    if (row) row.classList.toggle('off-dim', !on);
+  });
+}
+
+// segmented with a sliding white pill
+function segmented(container, options, get, put, { vertical = true, disabled, quiet } = {}) {
+  container.classList.toggle('h', !vertical);
+  container.innerHTML = '<span class="pill"></span>' + options.map((o) => `<button data-v="${esc(o.value)}">${esc(o.label)}</button>`).join('');
+  const pill = $('.pill', container);
+  for (const b of $$('button', container)) b.addEventListener('click', () => { put(b.dataset.v); quiet ? move() : changed(); });
+  const move = () => {
+    if (!cur) return;  // the resize observer can fire before the settings have loaded
+    const v = String(get());
+    let target = null;
+    for (const b of $$('button', container)) {
+      const on = b.dataset.v === v;
+      b.setAttribute('aria-pressed', String(on));
+      b.disabled = disabled ? disabled() : false;
+      if (on) target = b;
+    }
+    if (!target || !target.offsetWidth) { pill.style.opacity = target ? '1' : '0'; return; }
+    pill.style.opacity = '1';
+    pill.style.width = target.offsetWidth + 'px';
+    pill.style.height = target.offsetHeight + 'px';
+    pill.style.transform = `translate(${target.offsetLeft}px, ${target.offsetTop}px)`;
+  };
+  addSync(move);
+  new ResizeObserver(move).observe(container);
+}
+
+// big dial, after Audeze's Game/Chat mix knob
+function dial(container, spec) {
+  const R = 100, A0 = 225, SWEEP = 270;  // degrees clockwise from 12 o'clock: bottom-left to bottom-right
+  container.innerHTML = `<div class="dial" tabindex="0" role="slider" aria-label="${esc(spec.label)}" aria-valuemin="${spec.min}" aria-valuemax="${spec.max}">
+    <svg viewBox="0 0 220 220"><path class="track" fill="none" stroke="#3b3b3b" stroke-width="12" stroke-linecap="round"/>
+    <path class="arc" fill="none" stroke="#bdbdbd" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="110" cy="110" r="80" fill="none" stroke="#262626" stroke-width="6"/>
+    <line class="mark" x1="110" y1="8" x2="110" y2="20" stroke="#fff" stroke-width="2"/>
+    <rect class="knob" x="106" y="40" width="8" height="18" rx="3" fill="#cfcfcf"/></svg>
+    <div class="val"></div></div><div class="dial-ends"><span>${esc(spec.fmt(spec.min))}</span><span>${esc(spec.fmt(spec.max))}</span></div>`;
+  const el = $('.dial', container), arc = $('.arc', el), knob = $('.knob', el), val = $('.val', el), track = $('.track', el);
+  const polar = (deg, r = R) => { const a = (deg - 90) * Math.PI / 180; return [110 + r * Math.cos(a), 110 + r * Math.sin(a)]; };
+  const path = (d0, d1) => { const [x0, y0] = polar(d0), [x1, y1] = polar(d1); return `M${x0} ${y0} A${R} ${R} 0 ${d1 - d0 > 180 ? 1 : 0} 1 ${x1} ${y1}`; };
+  track.setAttribute('d', path(A0, A0 + SWEEP));
+  const frac = (v) => (v - spec.min) / (spec.max - spec.min);
+  const zero = frac(spec.center ?? spec.min);
+  $('.mark', el).setAttribute('transform', `rotate(${A0 + SWEEP * zero} 110 110)`);  // tick at 0 dB
+  let shown = null, raf = 0;
+  const draw = (v) => {
+    const a = A0 + SWEEP * frac(v), a0 = A0 + SWEEP * zero;
+    arc.setAttribute('d', Math.abs(a - a0) < 0.5 ? '' : path(Math.min(a, a0), Math.max(a, a0)));
+    knob.setAttribute('transform', `rotate(${a} 110 110)`);
+    val.textContent = spec.fmt(v);
+    el.setAttribute('aria-valuenow', v);
+  };
+  const animateTo = (target) => {  // smooth glide to new values that come from presets or the engine
+    cancelAnimationFrame(raf);
+    if (shown === null || dragging) { shown = target; draw(target); return; }
+    const from = shown, t0 = performance.now();
+    const step = (t) => { const k = Math.min(1, (t - t0) / 260); const e = 1 - Math.pow(1 - k, 3); shown = from + (target - from) * e; draw(shown); if (k < 1) raf = requestAnimationFrame(step); };
+    raf = requestAnimationFrame(step);
+  };
+  let dragging = false, startY = 0, startV = 0;
+  const set = (v) => { v = clamp(Math.round(v / spec.step) * spec.step, spec.min, spec.max); setPath(cur, spec.path, v); shown = v; draw(v); changed(); };
+  el.addEventListener('pointerdown', (e) => { dragging = true; startY = e.clientY; startV = getPath(cur, spec.path); el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', (e) => { if (dragging) set(startV + (startY - e.clientY) * (spec.max - spec.min) / 260); });
+  el.addEventListener('pointerup', () => { dragging = false; });
+  el.addEventListener('pointercancel', () => { dragging = false; });
+  el.addEventListener('wheel', (e) => { e.preventDefault(); set(getPath(cur, spec.path) - Math.sign(e.deltaY) * spec.step); }, { passive: false });
+  el.addEventListener('dblclick', () => set(spec.def));
+  el.addEventListener('keydown', (e) => { const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (d) { e.preventDefault(); set(getPath(cur, spec.path) + d * spec.step); } });
+  addSync(() => { const v = getPath(cur, spec.path); if (v !== undefined) animateTo(v); });
+}
+
+// vertical faders, after Audeze's EQ page
+function faders(container, bands, range = 12) {
+  container.style.setProperty('--n', bands.length);
+  container.innerHTML = `<div class="scale"><span>+${range}</span><span>+${range / 2}</span><span>0</span><span>−${range / 2}</span><span>−${range}</span></div>`;
+  for (const b of bands) {
+    const f = document.createElement('div');
+    f.className = 'fader';
+    f.innerHTML = `<div class="fv"></div><div class="slot" role="slider" tabindex="0" aria-label="${esc(b.label)}"><div class="bar"><div class="fill"></div></div></div><div class="ff"></div>`;
+    const slot = $('.slot', f), bar = $('.bar', f), fill = $('.fill', f), fv = $('.fv', f), ff = $('.ff', f);
+    const set = (v) => { setPath(cur, b.path, clamp(Math.round(v * 2) / 2, b.min ?? -range, b.max ?? range)); changed(); };
+    const fromY = (y) => { const r = bar.getBoundingClientRect(); return range - (y - r.top) / r.height * 2 * range; };
+    let drag = false;
+    slot.addEventListener('pointerdown', (e) => { drag = true; f.classList.add('active'); slot.setPointerCapture(e.pointerId); set(fromY(e.clientY)); });
+    slot.addEventListener('pointermove', (e) => { if (drag) set(fromY(e.clientY)); });
+    const end = () => { drag = false; f.classList.remove('active'); };
+    slot.addEventListener('pointerup', end); slot.addEventListener('pointercancel', end);
+    slot.addEventListener('dblclick', () => set(0));
+    slot.addEventListener('keydown', (e) => { const d = { ArrowUp: .5, ArrowDown: -.5 }[e.key]; if (d) { e.preventDefault(); set(getPath(cur, b.path) + d); } });
+    container.appendChild(f);
+    syncers.push(() => {
+      const v = getPath(cur, b.path);
+      if (v === undefined) return;
+      fill.style.height = ((clamp(v, -range, range) + range) / (2 * range) * 100) + '%';
+      fv.textContent = (v > 0 ? '+' : '') + (Number.isInteger(v) ? v : v.toFixed(1));
+      ff.innerHTML = `<b>${esc(b.label)}</b>` + (b.freq ? `<span>${fmtHz(getPath(cur, b.freq))}</span>` : '');
+      slot.title = b.label;
+    });
+  }
+}
+
+// ============================================================== mic page
+const ROUTES = [{ value: 'in1', label: 'Input 1' }, { value: 'in2', label: 'Input 2' }, { value: 'mix', label: 'Both' }, { value: 'stereo', label: 'Stereo' }];
+const BANDS = {
+  bass: { label: 'Bass', type: 'LS', gain: [-12, 15], freq: [50, 300], q: [0.4, 1.6] },
+  mud: { label: 'Mud', type: 'PK', gain: [-12, 8], freq: [150, 800], q: [0.5, 3] },
+  presence: { label: 'Presence', type: 'PK', gain: [-10, 10], freq: [1500, 8000], q: [0.5, 3] },
+  sibilance: { label: 'Sibilance', type: 'PK', gain: [-12, 3], freq: [4000, 12000], q: [1, 6] },
+  air: { label: 'Air', type: 'HS', gain: [-10, 10], freq: [6000, 16000], q: [0.4, 1.4] },
+};
+
+function buildMic() {
+  dial($('#boostDial'), { path: 'gain', min: -12, max: 24, step: 0.5, center: 0, def: 0, fmt: fmtDb, label: 'Mic boost' });
+  switchFor($('[data-switch="enabled"]'), 'enabled');
+  segmented($('#routeSeg'), ROUTES, () => (cur.route === 'guitar' ? 'in1' : cur.route), (v) => { cur.route = v; }, { vertical: false, disabled: () => cur.route === 'guitar' });
+  syncers.push(() => { $('#routeHint').textContent = cur.route === 'guitar' ? 'Input 1. The guitar is on Input 2, so this is fixed until you turn the guitar off.' : 'Where your PodMic is on the Focusrite. The voice always reaches both ears.'; });
+  segmented($('#denoiseSeg'), [{ value: 'off', label: 'Off' }, { value: 'light', label: 'Light' }, { value: 'medium', label: 'Medium' }, { value: 'strong', label: 'Strong' }],
+    () => (cur.denoise.on ? cur.denoise.strength : 'off'), (v) => { cur.denoise.on = v !== 'off'; if (v !== 'off') cur.denoise.strength = v; });
+  switchFor($('[data-switch="lowcut.on"]'), 'lowcut.on');
+  slider($('#lowcutCtl'), { path: 'lowcut.freq', min: 20, max: 300, log: true, fmt: fmtHz, label: 'Cut below', def: 80 });
+  switchFor($('[data-switch="gate.on"]'), 'gate.on');
+  slider($('#gateCtl'), { path: 'gate.thresh', min: -80, max: -10, step: 1, fmt: fmtDb, label: 'Opens above', def: -50 });
+  slider($('#gateCtl'), { path: 'gate.range', min: 6, max: 60, step: 1, fmt: (v) => v >= 60 ? 'Mute' : '−' + v + ' dB', label: 'Room turned down by', def: 30 });
+  slider($('#gateCtl'), { path: 'gate.hold', min: 0, max: 500, step: 10, fmt: fmtMs, label: 'Hold', def: 100, adv: true });
+  slider($('#gateCtl'), { path: 'gate.release', min: 20, max: 1000, log: true, round: roundMs, fmt: fmtMs, label: 'Release', def: 200, adv: true });
+
+  slider($('#toneCtl'), { path: 'bass.gain', min: -12, max: 15, step: 0.5, center: 0, fmt: fmtDb, label: 'Bass (depth)', def: 0 });
+  slider($('#toneCtl'), { path: 'presence.gain', min: -10, max: 10, step: 0.5, center: 0, fmt: fmtDb, label: 'Clarity', def: 0 });
+  switchFor($('[data-switch="warmth.on"]'), 'warmth.on');
+  slider($('#warmCtl'), { path: 'warmth.drive', min: 0, max: 18, step: 0.5, fmt: fmtDb, label: 'Drive', def: 6 });
+  faders($('#eqFaders'), Object.entries(BANDS).map(([k, b]) => ({ path: `${k}.gain`, label: b.label, freq: `${k}.freq`, min: b.gain[0], max: b.gain[1] })));
+  const fine = $('#eqFine');
+  for (const [k, b] of Object.entries(BANDS)) {
+    const box = document.createElement('div');
+    box.innerHTML = `<p class="sec" style="margin-top:4px">${b.label}</p>`;
+    box.style.display = 'grid'; box.style.gap = '12px';
+    slider(box, { path: `${k}.freq`, min: b.freq[0], max: b.freq[1], log: true, fmt: fmtHz, label: 'Frequency' });
+    slider(box, { path: `${k}.q`, min: b.q[0], max: b.q[1], step: 0.05, fmt: (v) => v.toFixed(2), label: 'Width (Q)' });
+    fine.appendChild(box);
+  }
+  switchFor($('[data-switch="hicut.on"]'), 'hicut.on');
+  slider($('#hicutCtl'), { path: 'hicut.freq', min: 4000, max: 20000, log: true, fmt: fmtHz, label: 'Cut above', def: 16000 });
+
+  switchFor($('[data-switch="comp.on"]'), 'comp.on');
+  const c = $('#compCtl');
+  slider(c, { path: 'comp.thresh', min: -50, max: 0, step: 0.5, fmt: fmtDb, label: 'Threshold', def: -24 });
+  slider(c, { path: 'comp.ratio', min: 1.1, max: 7, step: 0.1, fmt: (v) => v.toFixed(1) + ':1', label: 'Ratio', def: 3 });
+  slider(c, { path: 'comp.makeup', min: 0, max: 18, step: 0.5, fmt: fmtDb, label: 'Makeup', def: 4 });
+  slider(c, { path: 'comp.attack', min: 0.1, max: 100, log: true, round: roundMs, fmt: fmtMs, label: 'Attack', def: 10, adv: true });
+  slider(c, { path: 'comp.release', min: 20, max: 1000, log: true, round: roundMs, fmt: fmtMs, label: 'Release', def: 120, adv: true });
+  slider(c, { path: 'comp.knee', min: 0, max: 16, step: 0.5, fmt: fmtDb, label: 'Soft knee', def: 6, adv: true });
+  switchFor($('[data-switch="deesser.on"]'), 'deesser.on');
+  slider($('#deessCtl'), { path: 'deesser.thresh', min: -50, max: 0, step: 0.5, fmt: fmtDb, label: 'Threshold', def: -30 });
+  slider($('#deessCtl'), { path: 'deesser.freq', min: 3000, max: 12000, log: true, fmt: fmtHz, label: 'Frequency', def: 6500 });
+  slider($('#deessCtl'), { path: 'deesser.q', min: 0.3, max: 1.6, step: 0.05, fmt: (v) => v.toFixed(2), label: 'Width', def: 1, adv: true });
+  switchFor($('[data-switch="limiter.on"]'), 'limiter.on');
+  slider($('#limCtl'), { path: 'limiter.ceiling', min: -12, max: 0, step: 0.1, fmt: fmtDb, label: 'Ceiling', def: -1 });
+  slider($('#limCtl'), { path: 'limiter.drive', min: 0, max: 12, step: 0.5, fmt: fmtDb, label: 'Loudness drive', def: 0 });
+
+  rack($('#micRack'), () => cur.rack, 'mic');
+  presetList('mic');
+}
+
+// ============================================================== guitar page
+function buildGuitar() {
+  $('#gOnTg').addEventListener('click', () => toggleGuitar());
+  syncers.push(() => { const on = cur.route === 'guitar'; $('#gOnTg').setAttribute('aria-checked', String(on)); $('#gGrid').style.opacity = on ? '1' : '.45'; });
+  dial($('#gBoostDial'), { path: 'guitar.gain', min: -12, max: 24, step: 0.5, center: 0, def: 0, fmt: fmtDb, label: 'Guitar input boost' });
+  slider($('#gLevelCtl'), { path: 'guitar.level', min: -30, max: 6, step: 0.5, center: 0, fmt: fmtDb, label: 'Level next to your voice', def: 0 });
+  switchFor($('[data-switch="guitar.gate.on"]'), 'guitar.gate.on');
+  slider($('#gGateCtl'), { path: 'guitar.gate.thresh', min: -90, max: -20, step: 1, fmt: fmtDb, label: 'Opens above', def: -60 });
+  slider($('#gLowCtl'), { path: 'guitar.lowcut', min: 40, max: 200, log: true, fmt: fmtHz, label: 'Cut below', def: 70 });
+  switchFor($('[data-switch="guitar.comp.on"]'), 'guitar.comp.on');
+  slider($('#gSusCtl'), { path: 'guitar.comp.sustain', min: 0, max: 10, step: 0.5, fmt: (v) => v.toFixed(1), label: 'Amount', def: 4 });
+  faders($('#gFaders'), [{ path: 'guitar.bass', label: 'Bass' }, { path: 'guitar.mid', label: 'Mid' }, { path: 'guitar.treble', label: 'Treble' }]);
+  slider($('#gToneCtl'), { path: 'guitar.tonecut', min: 2000, max: 16000, log: true, fmt: fmtHz, label: 'Tone (cut fizz above)', def: 8000 });
+  rack($('#gRack'), () => cur.guitar.rack, 'guitar');
+  presetList('guitar');
+}
+
+async function toggleGuitar(force) {
+  const on = force ?? cur.route !== 'guitar';
+  await mixer({ guitarOn: on });
+  if (on) toast('Guitar on. Input 2 is mixed in with your voice for every app.');
+}
+
+// ============================================================== effects rack
+const FX_INFO = {
+  supermassive: 'Massive delays and reverbs, from slapback to endless space. 22 modes.',
+  'df-hall': 'Big concert-hall reverb with deep control.',
+  'df-room': 'A natural room. Subtle depth for voice.',
+  'df-plate': 'Classic studio plate: smooth and bright on vocals and guitar.',
+  'df-early': 'Only the first reflections. Makes a dry sound feel like it is in a real space.',
+  graillon: 'Pitch shift, auto-tune, formant, doubler and chorus.',
+  tse808: 'Tube Screamer overdrive. Warm crunch for guitar.',
+  slickeq: 'Musical analog EQ with four classic EQ models and saturation.',
+  nova: 'Dynamic EQ for precise, surgical tone control.',
+  kotelnikov: 'Mastering-grade compressor.',
+  loudmax: 'Transparent look-ahead limiter.',
+};
+const openSlots = new Set(store.get('openSlots', []));
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+// plugin parameter names as people read them: "Delay_Ms" -> "Delay", "ModDepth" -> "Mod Depth"
+const pretty = (n) => n.replace(/_Ms$/, '').replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+function paramControl(container, pid, q, slotRef) {
+  q = { ...q, name: q.name, label: pretty(q.name) };
+  const get = () => { const s = slotRef(); return s ? (s.values[q.name] ?? q.default) : q.default; };
+  const set = (v) => { const s = slotRef(); if (s) s.values[q.name] = v; };
+  if (q.kind === 'number') {
+    const shown = q.shown, at = (v) => shown[Math.round(clamp(v, 0, 1) * (shown.length - 1))];
+    const unit = (s) => (s + (q.unit && !String(s).includes(q.unit) ? ' ' + q.unit : '')).trim();
+    slider(container, { table: true, label: q.label, get, set, fmt: (v) => unit(at(v)), ends: [unit(shown[0]), unit(shown[shown.length - 1])], def: q.default, adv: !q.main });
+    return;
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'sl' + (q.main ? '' : ' adv');
+  wrap.innerHTML = `<div class="sl-head"><span>${esc(q.label)}</span></div>`;
+  const nearest = () => { const v = get(); return q.choices.reduce((a, c) => Math.abs(c.value - v) < Math.abs(a.value - v) ? c : a).value; };
+  if (q.choices.length <= 4) {
+    const seg = document.createElement('div'); seg.className = 'seg';
+    wrap.appendChild(seg); container.appendChild(wrap);
+    segmented(seg, q.choices.map((c) => ({ value: String(c.value), label: c.text })), () => String(nearest()), (v) => set(+v), { vertical: false });
+  } else {
+    const sel = document.createElement('select'); sel.className = 'sel';
+    sel.innerHTML = q.choices.map((c) => `<option value="${c.value}">${esc(c.text)}</option>`).join('');
+    sel.addEventListener('change', () => { set(+sel.value); changed(); });
+    wrap.appendChild(sel); container.appendChild(wrap);
+    addSync(() => { sel.value = String(nearest()); });
+  }
+}
+
+function rack(container, list, kind) {
+  let sig = null, local = [];
+  const render = () => {
+    const slots = list();
+    const now = slots.map((s) => s.uid + s.plugin).join('|');
+    if (now === sig) { for (const s of local) s(); return; }  // rebuild only when slots are added, removed or moved
+    sig = now;
+    local = [];
+    const outer = syncTarget;
+    syncTarget = local;
+    container.innerHTML = '';
+    if (!slots.length) container.insertAdjacentHTML('beforeend', '<p class="empty">No effects yet.</p>');
+    slots.forEach((slot, i) => {
+      const p = catalog[slot.plugin];
+      if (!p) return;
+      const card = document.createElement('div');
+      card.className = 'slot-card' + (openSlots.has(slot.uid) ? ' open' : '');
+      card.innerHTML = `<div class="slot-head"><span class="num">${i + 1}</span><div class="nm"><b>${esc(p.name)}</b><span>${esc(p.category)} · ${esc(p.vendor)}</span></div>
+        <button class="icon-btn" data-a="up" title="Move up" ${i === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg></button>
+        <button class="icon-btn" data-a="down" title="Move down" ${i === slots.length - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <button class="icon-btn" data-a="del" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button class="tg" role="switch" aria-label="On"></button>
+        <span class="icon-btn chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span></div>
+        <div class="slot-body"><div><div class="slot-params"></div>
+        ${p.params.some((q) => !q.main) ? '<div class="slot-more"><button class="btn ghost" data-a="more">All controls</button></div>' : ''}</div></div>`;
+      const ref = () => list().find((s) => s.uid === slot.uid);
+      const params = $('.slot-params', card);
+      for (const q of p.params) paramControl(params, slot.plugin, q, ref);
+      const tg = $('.tg', card);
+      addSync(() => { const s = ref(); if (!s) return; tg.setAttribute('aria-checked', String(s.on)); card.classList.toggle('disabled', !s.on); });
+      card.addEventListener('click', (e) => {
+        const a = e.target.closest('[data-a]')?.dataset.a;
+        const arr = list(), idx = arr.findIndex((s) => s.uid === slot.uid);
+        if (e.target.closest('.tg')) { arr[idx].on = !arr[idx].on; changed(); return; }
+        if (a === 'up' || a === 'down') { const j = idx + (a === 'up' ? -1 : 1); [arr[idx], arr[j]] = [arr[j], arr[idx]]; changed(); return; }
+        if (a === 'del') {
+          if (card.dataset.removing) return;  // a double-click must not remove the next effect too
+          card.dataset.removing = '1';
+          card.style.transition = 'opacity .2s, transform .2s'; card.style.opacity = '0'; card.style.transform = 'translateX(12px)';
+          setTimeout(() => { const now = list(), k = now.findIndex((s) => s.uid === slot.uid); if (k >= 0) now.splice(k, 1); changed(); }, 180);
+          return;
+        }
+        if (a === 'more') { card.classList.toggle('show-all'); $$('.adv', params).forEach((el) => el.classList.toggle('adv-on')); e.target.textContent = e.target.textContent === 'All controls' ? 'Fewer controls' : 'All controls'; return; }
+        if (e.target.closest('.slot-head')) {
+          card.classList.toggle('open');
+          card.classList.contains('open') ? openSlots.add(slot.uid) : openSlots.delete(slot.uid);
+          store.set('openSlots', [...openSlots]);
+          setTimeout(syncAll, 20);
+        }
+      });
+      container.appendChild(card);
+    });
+    const add = document.createElement('button');
+    add.className = 'add-fx';
+    add.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Add effect';
+    add.disabled = slots.length >= 8;
+    add.addEventListener('click', () => picker(kind, list));
+    container.appendChild(add);
+    syncTarget = outer;
+    for (const s of local) s();
+  };
+  syncers.push(render);
+}
+
+function picker(kind, list) {
+  const groups = {};
+  for (const p of Object.values(catalog)) if (p.rack !== false && p.installed !== false) (groups[p.category] ||= []).push(p);
+  const order = ['Reverb', 'Reverb & Delay', 'Voice FX', 'Drive', 'EQ', 'Dynamics'];
+  const m = document.createElement('div');
+  m.className = 'modal';
+  m.innerHTML = `<div class="modal-panel" role="dialog" aria-label="Add effect"><div style="display:flex;align-items:center;gap:12px;margin-bottom:6px"><h3 style="flex:1">Add effect</h3><button class="icon-btn" data-close title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <p class="desc">To the ${kind === 'guitar' ? 'guitar' : 'mic'}. It's added at the end of the effects, before the limiter.</p>
+    ${Object.keys(groups).sort((a, b) => order.indexOf(a) - order.indexOf(b)).map((g) => `<p class="sec" style="margin-top:18px">${esc(g)}</p><div class="fx-grid">${groups[g].map((p) => `<button class="fx-card" data-p="${p.id}"><b>${esc(p.name)}</b><span class="vendor">${esc(p.vendor)}</span><span class="what">${esc(FX_INFO[p.id] || '')}</span></button>`).join('')}</div>`).join('')}</div>`;
+  const close = () => { m.style.transition = 'opacity .18s'; m.style.opacity = '0'; setTimeout(() => m.remove(), 180); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  m.addEventListener('click', (e) => {
+    if (e.target === m || e.target.closest('[data-close]')) return close();
+    const pid = e.target.closest('[data-p]')?.dataset.p;
+    if (!pid) return;
+    const id = uid();
+    list().push({ uid: id, plugin: pid, on: true, values: {} });
+    openSlots.add(id); store.set('openSlots', [...openSlots]);
+    close();
+    changed();
+    toast(`${catalog[pid].name} added.`);
+  });
+  document.body.appendChild(m);
+  $('.fx-card', m)?.focus();
+}
+
+// ============================================================== presets (Audeze list)
+const toneKey = (s) => { const t = clone(s); for (const k of ['route', 'enabled', 'mute', 'guitar', 'version']) delete t[k]; return JSON.stringify(t); };
+const gToneKey = (g) => { const t = clone(g || {}); delete t.on; delete t.mute; return JSON.stringify(t); };
+function presetList(kind) {
+  const ids = kind === 'mic' ? ['#micBuiltins', '#micCustom', '#micPresetName', '#micSave'] : ['#gBuiltins', '#gCustom', '#gPresetName', '#gSave'];
+  const [bEl, cEl, nameEl, saveEl] = ids.map((s) => $(s));
+  const list = () => (kind === 'mic' ? state.presets : state.guitarPresets) || [];
+  const active = (p) => kind === 'mic' ? toneKey(p.settings) === toneKey(cur) : gToneKey(p.settings) === gToneKey(cur.guitar);
+  const use = (p) => {
+    if (kind === 'mic') cur = { ...clone(p.settings), route: cur.route, enabled: true, mute: cur.mute, guitar: clone(cur.guitar) };
+    else cur.guitar = { ...clone(p.settings), on: cur.guitar.on, mute: cur.guitar.mute };
+    changed();
+  };
+  let sig = '';
+  addSync(() => {
+    if (!state) return;
+    const now = list().map((p) => p.name + active(p)).join('|');
+    if (now === sig) return;
+    sig = now;
+    for (const [el, builtin] of [[bEl, true], [cEl, false]]) {
+      el.innerHTML = '';
+      const items = list().filter((p) => p.builtin === builtin);
+      if (!builtin && !items.length) el.innerHTML = '<p class="empty" style="padding:0">Your saved sounds show up here.</p>';
+      for (const p of items) {
+        const b = document.createElement('button');
+        b.className = 'pitem';
+        b.setAttribute('aria-pressed', String(active(p)));
+        b.innerHTML = `<span>${esc(p.name)}</span>${builtin ? '' : '<span class="x" title="Delete" role="button">✕</span>'}`;
+        b.addEventListener('click', async (e) => {
+          if (e.target.closest('.x')) {
+            try { const s = await api('/api/presets/delete', { name: p.name, kind }); state.presets = s.presets; state.guitarPresets = s.guitarPresets; sig = ''; syncAll(); toast(`Deleted "${p.name}".`); } catch (err) { toast(err.message); }
+            return;
+          }
+          use(p);
+        });
+        el.appendChild(b);
+      }
+    }
+  });
+  saveEl.addEventListener('click', async () => {
+    const name = nameEl.value.trim();
+    if (!name) { nameEl.focus(); return; }
+    try {
+      const s = await api('/api/presets/save', { name, kind, settings: cur });
+      state.presets = s.presets; state.guitarPresets = s.guitarPresets; sig = '';
+      nameEl.value = '';
+      syncAll();
+      toast(`Saved "${name}".`);
+    } catch (e) { toast(e.message); }
+  });
+  nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveEl.click(); });
+}
+
+// ============================================================== EQ curve
+const FS = 48000;
+function biquad(type, f0, gainDb, Q) {
+  const A = Math.pow(10, gainDb / 40), w0 = 2 * Math.PI * f0 / FS, cw = Math.cos(w0), sw = Math.sin(w0), al = sw / (2 * Q);
+  let b0, b1, b2, a0, a1, a2;
+  if (type === 'PK') { b0 = 1 + al * A; b1 = -2 * cw; b2 = 1 - al * A; a0 = 1 + al / A; a1 = -2 * cw; a2 = 1 - al / A; }
+  else if (type === 'LS') { const s = 2 * Math.sqrt(A) * al; b0 = A * ((A + 1) - (A - 1) * cw + s); b1 = 2 * A * ((A - 1) - (A + 1) * cw); b2 = A * ((A + 1) - (A - 1) * cw - s); a0 = (A + 1) + (A - 1) * cw + s; a1 = -2 * ((A - 1) + (A + 1) * cw); a2 = (A + 1) + (A - 1) * cw - s; }
+  else if (type === 'HS') { const s = 2 * Math.sqrt(A) * al; b0 = A * ((A + 1) + (A - 1) * cw + s); b1 = -2 * A * ((A - 1) + (A + 1) * cw); b2 = A * ((A + 1) + (A - 1) * cw - s); a0 = (A + 1) - (A - 1) * cw + s; a1 = 2 * ((A - 1) - (A + 1) * cw); a2 = (A + 1) - (A - 1) * cw - s; }
+  else if (type === 'HP') { b0 = (1 + cw) / 2; b1 = -(1 + cw); b2 = (1 + cw) / 2; a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al; }
+  else { b0 = (1 - cw) / 2; b1 = 1 - cw; b2 = (1 - cw) / 2; a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al; }
+  return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
+}
+function magDb(c, f) {
+  const w = 2 * Math.PI * f / FS, c1 = Math.cos(w), s1 = Math.sin(w), c2 = Math.cos(2 * w), s2 = Math.sin(2 * w);
+  const nr = c[0] + c[1] * c1 + c[2] * c2, ni = -(c[1] * s1 + c[2] * s2), dr = 1 + c[3] * c1 + c[4] * c2, di = -(c[3] * s1 + c[4] * s2);
+  return 10 * Math.log10((nr * nr + ni * ni) / (dr * dr + di * di));
+}
+let coefs = [];
+function rebuildFilters() {
+  coefs = [];
+  if (!cur.enabled || bypass) return;
+  if (cur.lowcut.on) coefs.push(biquad('HP', cur.lowcut.freq, 0, 0.54), biquad('HP', cur.lowcut.freq, 0, 1.31));
+  for (const [k, b] of Object.entries(BANDS)) if (cur[k].gain) coefs.push(biquad(b.type, cur[k].freq, cur[k].gain, cur[k].q));
+  if (cur.hicut.on) coefs.push(biquad('LP', cur.hicut.freq, 0, 0.71));
+}
+const responseAt = (f) => coefs.reduce((s, c) => s + magDb(c, f), 0);
+const canvas = $('#curve'), g2 = canvas.getContext('2d');
+const FMIN = 20, FMAX = 20000, DBR = 15, PAD = 14;
+const xOf = (f, w) => Math.log(f / FMIN) / Math.log(FMAX / FMIN) * w, fOf = (x, w) => FMIN * Math.pow(FMAX / FMIN, x / w);
+const yOf = (db, h) => h / 2 - db / DBR * (h / 2 - PAD), dbOf = (y, h) => (h / 2 - y) / (h / 2 - PAD) * DBR;
+let hover = null, drag = null, spectrum = null, smooth = null;
+function handles(w, h) {
+  if (!cur) return [];
+  return Object.entries(BANDS).map(([k, b]) => ({ key: k, name: b.label, f: cur[k].freq, db: cur[k].gain, x: xOf(cur[k].freq, w), y: yOf(cur[k].gain, h) }));
+}
+function draw() {
+  if (!cur || !canvas.offsetParent) return;
+  const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+  const g = g2;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  g.font = '11px Lexend, sans-serif';
+  g.lineWidth = 1;
+  for (const f of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) {
+    const x = Math.round(xOf(f, w)) + .5;
+    g.strokeStyle = '#1a1a1a'; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
+    g.fillStyle = '#555'; g.fillText(f >= 1000 ? f / 1000 + 'k' : String(f), x + 4, h - 6);
+  }
+  for (const db of [-10, -5, 0, 5, 10]) {
+    const y = Math.round(yOf(db, h)) + .5;
+    g.strokeStyle = db === 0 ? '#2a2a2a' : '#161616'; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+  }
+  if (spectrum && analyser) {  // your live voice, as apps hear it
+    analyser.getFloatFrequencyData(spectrum);
+    const binHz = ctx.sampleRate / analyser.fftSize, pts = Math.ceil(w / 3) + 1;
+    smooth = smooth && smooth.length === pts ? smooth : new Float32Array(pts);
+    g.beginPath(); g.moveTo(0, h);
+    for (let i = 0; i < pts; i++) {
+      const x = i * 3, f0 = fOf(x, w), f1 = fOf(x + 3, w);
+      const a = Math.max(1, Math.floor(f0 / binHz)), b = Math.max(a, Math.min(spectrum.length - 1, Math.floor(f1 / binHz)));
+      let m = -200; for (let k = a; k <= b; k++) m = Math.max(m, spectrum[k]);
+      const v = clamp((m + 3 * Math.log2(f0 / 1000) + 100) / 85, 0, 1);
+      smooth[i] = smooth[i] * 0.6 + v * 0.4;
+      g.lineTo(x, h - smooth[i] * (h - 8));
+    }
+    g.lineTo(w, h); g.closePath();
+    g.fillStyle = 'rgba(255,255,255,.07)'; g.fill();
+  }
+  const zero = yOf(0, h), line = [];
+  for (let x = 0; x <= w; x += 2) line.push([x, yOf(clamp(responseAt(fOf(x, w)), -DBR - 2, DBR + 2), h)]);
+  g.beginPath(); g.moveTo(0, zero); for (const [x, y] of line) g.lineTo(x, y); g.lineTo(w, zero); g.closePath();
+  const fill = g.createLinearGradient(0, 0, 0, h);
+  fill.addColorStop(0, 'rgba(255,255,255,.14)'); fill.addColorStop(.5, 'rgba(255,255,255,.02)'); fill.addColorStop(1, 'rgba(255,255,255,.14)');
+  g.fillStyle = fill; g.fill();
+  g.beginPath(); line.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.strokeStyle = cur.enabled && !bypass ? '#ffffff' : '#555'; g.lineWidth = 2; g.stroke();
+  for (const hd of handles(w, h)) {
+    const on = drag?.key === hd.key || hover === hd.key;
+    g.beginPath(); g.arc(hd.x, hd.y, on ? 8 : 6, 0, Math.PI * 2);
+    g.fillStyle = on ? '#ffdd00' : '#ffffff'; g.fill();
+    g.lineWidth = 3; g.strokeStyle = '#0a0a0a'; g.stroke();
+  }
+  const tip = handles(w, h).find((hd) => hd.key === (drag?.key || hover));
+  if (tip) {
+    const text = `${tip.name}  ${fmtHz(tip.f)}  ${fmtDb(tip.db)}`;
+    g.font = '500 12px Lexend, sans-serif';
+    const tw = g.measureText(text).width + 16, tx = clamp(tip.x - tw / 2, 4, w - tw - 4), ty = tip.y > 40 ? tip.y - 34 : tip.y + 14;
+    g.fillStyle = '#222'; g.beginPath(); g.roundRect(tx, ty, tw, 22, 6); g.fill();
+    g.fillStyle = '#fff'; g.fillText(text, tx + 8, ty + 15);
+  }
+}
+function hit(e) {
+  const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  let best = null, d0 = 16;
+  for (const hd of handles(r.width, r.height)) { const d = Math.hypot(hd.x - x, hd.y - y); if (d < d0) { best = hd.key; d0 = d; } }
+  return { key: best, x, y, w: r.width, h: r.height };
+}
+canvas.addEventListener('pointerdown', (e) => { const t = hit(e); if (!t.key) return; drag = { key: t.key }; canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing'; });
+canvas.addEventListener('pointermove', (e) => {
+  const t = hit(e);
+  if (drag) {
+    const b = BANDS[drag.key];
+    cur[drag.key].freq = clamp(roundHz(fOf(t.x, t.w)), b.freq[0], b.freq[1]);
+    cur[drag.key].gain = clamp(Math.round(dbOf(t.y, t.h) * 2) / 2, b.gain[0], b.gain[1]);
+    changed(); return;
+  }
+  if (hover !== t.key) { hover = t.key; canvas.style.cursor = t.key ? 'grab' : 'default'; if (!raf) draw(); }
+});
+const endDrag = () => { if (drag) { drag = null; canvas.style.cursor = hover ? 'grab' : 'default'; if (!raf) draw(); } };
+canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+canvas.addEventListener('pointerleave', () => { if (!drag && hover) { hover = null; if (!raf) draw(); } });
+canvas.addEventListener('dblclick', (e) => { const t = hit(e); if (t.key) { cur[t.key].gain = 0; changed(); } });
+
+// ============================================================== sync with the engine
+function syncAll() {
+  for (const s of syncers) s();
+  rebuildFilters();
+  renderStatus();
+  if (!raf) draw();
+}
+// Live preview. Every update makes Equalizer APO reload all plugins, which restarts them (a tiny gap you
+// can hear), so the sound updates when you pause or let go, and at most every 0.65 s during a long drag.
+const SETTLE = 180, MAX_WAIT = 650;
+let previewTimer = null, previewSeq = 0, lastEdit = 0, lastSent = 0, burstStart = 0;
+const cancelPreview = () => { clearTimeout(previewTimer); previewTimer = null; };
+function changed() {
+  const now = Date.now();
+  if (!previewTimer) burstStart = now;
+  lastEdit = now;
+  bypass = false;
+  syncAll();
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => { previewTimer = null; lastSent = Date.now(); sendPreview(); },
+    Math.min(SETTLE, Math.max(0, burstStart + MAX_WAIT - now)));
+}
+async function sendPreview() {
+  const seq = ++previewSeq;
+  try {
+    const r = await api('/api/preview', { settings: cur });
+    if (seq !== previewSeq) return;
+    state.dirty = r.dirty; state.bypass = false; state.apo.error = r.error; state.latency = r.latency; state.guitarLatency = r.guitarLatency;
+    renderStatus();
+  } catch (e) { toast(e.message); }
+}
+function takeState(s) {
+  state = s; bypass = s.bypass; cur = clone(s.current);
+  renderDevices();
+  syncAll();
+}
+async function mixer(body) {
+  cancelPreview();
+  try { await sendPreview(); takeState(await api('/api/mixer', body)); } catch (e) { toast(e.message); }
+}
+const currentDevice = () => state?.devices.find((d) => d.id === state.deviceId);
+
+function renderStatus() {
+  if (!state) return;
+  const a = state.apo, dev = currentDevice();
+  let lamp = '', text = 'Live in every app', banner = null;
+  if (!a.installed) { lamp = 'bad'; text = 'Equalizer APO missing'; banner = ['bad', 'Equalizer APO isn\'t installed', 'Install it from sourceforge.net/projects/equalizerapo, then reopen Mic Control.', null]; }
+  else if (!dev) { lamp = 'warn'; text = 'Mic not found'; banner = ['', 'The Focusrite isn\'t connected', 'Plug it in. Your sound comes back as soon as Windows sees it.', null]; }
+  else if (!a.onDevice) { lamp = 'warn'; text = 'Setup needed'; banner = ['', 'One-time setup', `Open Device Selector, tick ${esc(dev.name)} under Capture devices, OK, then restart your PC.`, ['setup', 'Open Device Selector']]; }
+  else if (a.restartNeeded) { lamp = 'warn'; text = 'Restart PC'; banner = ['', 'Restart once to switch it on', 'Windows only loads Equalizer APO on a device after a restart.', null]; }
+  else if (a.error || !a.hooked) { lamp = 'bad'; text = 'Not connected'; banner = ['bad', 'Mic Control lost its link to Equalizer APO', esc(a.error || 'Something rewrote config.txt.'), ['hook', 'Reconnect']]; }
+  else if (!a.plugins) { lamp = 'bad'; text = 'Plugins missing'; banner = ['bad', 'Plugins are missing', 'Click Reconnect to reinstall them.', ['hook', 'Reconnect']]; }
+  else if (cur.mute) { lamp = 'bad'; text = 'Mic muted'; }
+  else if (bypass) { lamp = 'warn'; text = 'A/B: original'; }
+  else if (!cur.enabled) { lamp = 'warn'; text = 'Effects off'; }
+  const mono = dev && dev.channels === 1 && (cur.route === 'guitar' || page === 'guitar');
+  const html = [banner && `<div class="banner ${banner[0]}"><div><b>${banner[1]}</b><p>${banner[2]}</p></div>${banner[3] ? `<button class="btn white" data-act="${banner[3][0]}">${banner[3][1]}</button>` : ''}</div>`,
+    ...(state.crashGuard || []).map((c) => `<div class="banner bad"><div><b>${esc(c.name)} crashed Windows audio (${esc(c.when)})</b><p>Mic Control switched it off so your sound can't keep breaking. Everything else keeps working. Turn it back on if it was a one-off.</p></div><button class="btn white" data-act="guard:${esc(c.id)}">Turn back on</button></div>`),
+    mono && `<div class="banner bad"><div><b>Windows merges Input 1 and Input 2 into one channel</b><p>The guitar can't get its own sound. Windows sound settings → Recording → Analogue 1 + 2 → Properties → Advanced → 2 channel, 24 bit, 48000 Hz.</p></div><button class="btn white" data-act="sound">Open sound settings</button></div>`]
+    .filter(Boolean).join('');
+  const bEl = $('#banners');
+  if (bEl.dataset.html !== html) { bEl.innerHTML = html; bEl.dataset.html = html; }
+  $('#stLive i').className = 'lamp ' + lamp;
+  $('#stLive span').textContent = text;
+  $('#stDevice span').textContent = dev ? `${dev.adapter.replace(' USB Audio', '')} · ${dev.name}` : 'No mic';
+  $('#stMute span').textContent = cur.mute ? 'Muted' : 'Mute Off';
+  $('#stMute').classList.toggle('red', !!cur.mute);
+  const gOn = cur.route === 'guitar';
+  $('#stGuitar span').textContent = !gOn ? 'Guitar Off' : cur.guitar.mute ? 'Guitar Muted' : 'Guitar On';
+  $('#stGuitar').classList.toggle('hot', gOn && !cur.guitar.mute);
+  $('#stGuitar').classList.toggle('red', gOn && !!cur.guitar.mute);
+  $('#micDot').hidden = !cur.mute;
+  $('#setDot').hidden = !banner;
+  $('#latChip').textContent = `${Math.round(effectsDelay())} ms delay`;
+  renderMonitor();
+  $('#applyBtn').disabled = !state.dirty;
+  $('#revertBtn').disabled = !state.dirty;
+  $('#abBtn').classList.toggle('on', bypass);
+  renderSettings();
+}
+function renderDevices() {
+  const sel = $('#deviceSel');
+  const opts = state.devices.map((d) => `<option value="${d.id}">${esc(d.name)} (${esc(d.adapter)})</option>`).join('')
+    + (state.devices.some((d) => d.id === state.deviceId) ? '' : `<option value="${esc(state.deviceId || '')}">Saved mic (not plugged in)</option>`);
+  if (sel.dataset.opts !== opts) { sel.innerHTML = opts; sel.dataset.opts = opts; }
+  sel.value = state.deviceId || '';
+}
+function renderSettings() {
+  const dev = currentDevice(), a = state.apo;
+  const yes = (b) => b ? '<b style="color:var(--green)">Yes</b>' : '<b style="color:var(--red)">No</b>';
+  $('#devInfo').innerHTML = dev ? `<span>Format</span><div>${dev.channels || '?'} channel${dev.channels === 1 ? '' : 's'}, ${dev.rate ? dev.rate / 1000 + ' kHz' : '?'}</div>` : '<span>Status</span><div>Not connected</div>';
+  $('#apoInfo').innerHTML = `<span>Installed</span><div>${yes(a.installed)}</div><span>On this mic</span><div>${yes(a.onDevice)}${a.restartNeeded ? ' (restart PC)' : ''}</div><span>Connected</span><div>${yes(a.hooked && !a.error)}</div><span>Plugins</span><div>${yes(a.plugins)}</div>`;
+}
+$('#deviceSel').addEventListener('change', async (e) => { try { takeState(await api('/api/device', { id: e.target.value })); if (stream) openStream(); } catch (err) { toast(err.message); } });
+document.addEventListener('click', async (e) => {
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (!act) return;
+  try {
+    if (act === 'setup') { await api('/api/open-setup', {}); toast('Device Selector opened. It may be behind this window.'); }
+    if (act === 'hook') { takeState(await api('/api/hook', {})); toast('Reconnected.'); }
+  if (act?.startsWith('guard:')) { takeState(await api('/api/crash-guard/clear', { id: act.slice(6) })); toast('Turned back on.'); }
+    if (act === 'sound') { await api('/api/open-sound-settings', {}); toast('Sound settings opened. It may be behind this window.'); }
+  } catch (err) { toast(err.message); }
+});
+
+async function apply() {
+  if (!state.dirty) return;
+  cancelPreview();
+  await sendPreview();
+  try { takeState(await api('/api/apply', {})); toast('Applied. Every app gets this sound now.'); } catch (e) { toast(e.message); }
+}
+$('#applyBtn').addEventListener('click', apply);
+$('#revertBtn').addEventListener('click', async () => { cancelPreview(); try { takeState(await api('/api/revert', {})); toast('Back to your applied sound.'); } catch (e) { toast(e.message); } });
+$('#abBtn').addEventListener('click', async () => {
+  cancelPreview();
+  try { if (!bypass) await sendPreview(); const s = await api('/api/bypass', { on: !bypass }); state = s; bypass = s.bypass; syncAll(); } catch (e) { toast(e.message); }
+});
+$('#stMute').addEventListener('click', () => mixer({ micMute: !cur.mute }));
+$('#stGuitar').addEventListener('click', (e) => { if (e.shiftKey || cur.route !== 'guitar') toggleGuitar(); else mixer({ guitarMute: !cur.guitar.mute }); });
+$('#stGuitar').title = 'Click: turn the guitar on, then mute/unmute it. Shift+click: turn the guitar off.';
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); apply(); }
+});
+$('#fineTg').addEventListener('click', () => { const on = !document.body.classList.contains('fine'); document.body.classList.toggle('fine', on); $('#fineTg').setAttribute('aria-checked', String(on)); store.set('fine', on); setTimeout(syncAll, 10); });
+if (store.get('fine', false)) { document.body.classList.add('fine'); $('#fineTg').setAttribute('aria-checked', 'true'); }
+// "All controls" inside a rack slot shows that slot's extra controls without turning on fine-tune everywhere
+const style = document.createElement('style'); style.textContent = '.slot-card .adv.adv-on { display: grid !important; }'; document.head.appendChild(style);
+
+// ============================================================== pages
+const TITLES = { mic: 'Mic', guitar: 'Guitar', settings: 'Settings', help: 'Help' };
+let page = TITLES[store.get('page', 'mic')] ? store.get('page', 'mic') : 'mic';
+function go(p) {
+  page = p; store.set('page', p);
+  for (const el of $$('.page')) el.classList.toggle('on', el.dataset.page === p);
+  for (const n of $$('.nav[data-go]')) {
+    if (n.dataset.go === p) n.setAttribute('aria-current', 'page');
+    else n.removeAttribute('aria-current');
+  }
+  $('#title').textContent = TITLES[p];
+  $('#scroll').scrollTop = 0;
+  if (cur) requestAnimationFrame(syncAll);
+}
+for (const n of $$('.nav[data-go]')) n.addEventListener('click', () => go(n.dataset.go));
+
+// ============================================================== audio: meter, monitor, test
+let ctx = null, stream = null, source = null, analyser = null, anL = null, anR = null, raf = 0, buf = null, chans = 2;
+let recorder = null, clipUrl = null, peakHold = -120, peakAt = 0;
+const player = new Audio();
+async function ensureMic() {
+  if (stream) return true;
+  try { (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach((t) => t.stop()); }
+  catch { toast('Mic access was blocked. Allow it from the icon in the address bar.'); return false; }
+  await openStream();
+  return !!stream;
+}
+async function openStream() {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  if (source) source.disconnect();
+  const dev = currentDevice(), list = await navigator.mediaDevices.enumerateDevices();
+  const input = dev && list.find((d) => d.kind === 'audioinput' && !['default', 'communications'].includes(d.deviceId)
+    && d.label.toLowerCase().includes(dev.name.toLowerCase()) && d.label.toLowerCase().includes(dev.adapter.toLowerCase().split(' ')[0]));
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: input ? { exact: input.deviceId } : undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 } } });
+  } catch (e) { toast('Could not open the mic: ' + e.message); stream = null; return; }
+  ctx = ctx || new AudioContext({ latencyHint: 'interactive' });
+  await ctx.resume();
+  chans = stream.getAudioTracks()[0].getSettings().channelCount || 2;
+  source = ctx.createMediaStreamSource(stream);
+  analyser = ctx.createAnalyser(); analyser.fftSize = 8192; analyser.smoothingTimeConstant = 0.75;
+  spectrum = new Float32Array(analyser.frequencyBinCount);
+  source.connect(analyser);
+  const split = ctx.createChannelSplitter(2); source.connect(split);
+  anL = ctx.createAnalyser(); anR = ctx.createAnalyser(); anL.fftSize = anR.fftSize = 1024; buf = new Float32Array(1024);
+  split.connect(anL, 0); split.connect(anR, 1);
+  await routePlayer();
+  if (!raf) raf = requestAnimationFrame(loop);
+}
+const toDb = (x) => x > 1e-6 ? 20 * Math.log10(x) : -120;
+const lvl = { L: 0, R: 0 };
+function read(an) { an.getFloatTimeDomainData(buf); let pk = 0, sq = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > pk) pk = v; sq += v * v; } return { pk: toDb(pk), rms: toDb(Math.sqrt(sq / buf.length)) }; }
+function loop(t) {
+  raf = requestAnimationFrame(loop);
+  if (!analyser) return;
+  const L = read(anL), R = chans > 1 ? read(anR) : L;
+  for (const [side, m] of [['L', L], ['R', R]]) {
+    const target = clamp((m.rms + 3 + 60) / 60, 0, 1);
+    lvl[side] = target > lvl[side] ? target : lvl[side] * 0.9 + target * 0.1;  // fast up, smooth down
+    $('#m' + side).style.width = (lvl[side] * 100).toFixed(1) + '%';
+  }
+  const pk = Math.max(L.pk, R.pk);
+  if (pk >= peakHold || t - peakAt > 1500) { peakHold = pk; peakAt = t; }
+  const p = $('#peak');
+  p.textContent = peakHold <= -100 ? '−∞' : (peakHold >= -0.1 ? 'CLIP' : peakHold.toFixed(1));
+  p.style.color = peakHold >= -0.1 ? 'var(--red)' : '';
+  if (page === 'mic') draw();
+}
+// The monitor itself is native (monitor/MicMonitor.exe, run by the engine): a browser adds 30-60 ms.
+const effectsDelay = () => (page === 'guitar' || cur?.route === 'guitar' ? Math.max(state.latency || 0, state.guitarLatency || 0) : state.latency || 0);
+async function monitorApi(body) {
+  try { const r = await api('/api/monitor', body); state.monitor = r.monitor; renderMonitor(); return r.monitor; }
+  catch (e) { toast(e.message); }
+}
+function renderMonitor() {
+  const m = state?.monitor; if (!m) return;
+  const st = m.status || {}, live = m.on && m.running && st.latencyMs !== undefined;
+  const total = live ? st.latencyMs + effectsDelay() : 0;
+  $('#stMonitor').classList.toggle('hot', m.on && !m.error);
+  $('#stMonitor').classList.toggle('red', m.on && !!m.error);
+  $('#stMonitor span').textContent = !m.on ? 'Monitor' : m.error ? 'Monitor error' : live ? `Monitor · ${Math.round(total)} ms` : 'Monitor On';
+  const sel = $('#outSel');
+  const opts = m.outputs.map((o) => `<option value="${esc(o.id)}">${esc(o.name)}${o.default ? ' (Windows default)' : o.comms ? ' (Windows chat default)' : ''}</option>`).join('');
+  if (sel.dataset.opts !== opts) { sel.innerHTML = opts || '<option value="default">Default output</option>'; sel.dataset.opts = opts; }
+  if (document.activeElement !== sel) sel.value = m.outputs.some((o) => o.id === m.output) ? m.output : (m.outputs.find((o) => o.default)?.id || 'default');
+  const out = m.outputs.find((o) => o.id === sel.value), shared = !out || out.default || out.comms;
+  $('#monModeDesc').textContent = {
+    auto: shared ? 'Shared on this output, so it keeps playing your other apps. For the lowest delay pick an output Windows doesn\'t default to, like a headset\'s Chat channel.'
+                 : 'Lowest delay: Mic Control has this output to itself while monitoring, so other apps can\'t play on it meanwhile.',
+    exclusive: 'Always has the output to itself while monitoring. Lowest delay, but other apps can\'t play on it meanwhile.',
+    shared: 'Goes through the Windows mixer, so other apps keep playing on this output. About 10 ms more delay.',
+  }[m.mode];
+  const k = (a, b) => `<span>${a}</span><div>${b}</div>`;
+  $('#monInfo').innerHTML = !m.on ? k('Status', 'Off. Click Monitor in the bottom bar.')
+    : m.error ? k('Status', `<b style="color:var(--red)">${esc(m.error)}</b>`)
+    : !live ? k('Status', 'Starting...')
+    : k('You hear yourself', `<b>${Math.round(total)} ms</b> after you play`)
+      + k('Breakdown', `${st.latencyMs.toFixed(1)} ms monitor + ${effectsDelay().toFixed(1)} ms effects`)
+      + k('Output', st.mode === 'exclusive' ? `Direct, ${st.outputPeriodMs.toFixed(0)} ms buffer` : 'Through the Windows mixer')
+      + k('Dropouts', st.underruns ? `<b style="color:var(--yellow)">${st.underruns}</b>` : '<b style="color:var(--green)">None</b>');
+}
+syncers.push(() => $('#autoTg').setAttribute('aria-checked', String(!!state?.autostart)));
+$('#autoTg').addEventListener('click', async () => {
+  try { const r = await api('/api/autostart', { on: !state.autostart }); state.autostart = r.autostart; syncAll(); toast(r.autostart ? 'Mic Control will start in the tray when you log in.' : 'Mic Control won\'t start with Windows.'); }
+  catch (e) { toast(e.message); }
+});
+$('#outSel').addEventListener('change', async (e) => { await monitorApi({ output: e.target.value }); routePlayer(); });
+segmented($('#monModeSeg'), [{ value: 'auto', label: 'Auto' }, { value: 'exclusive', label: 'Direct' }, { value: 'shared', label: 'Shared' }],
+  () => state?.monitor?.mode || 'auto', (v) => { state.monitor.mode = v; monitorApi({ mode: v }); }, { vertical: false, quiet: true });
+let volTimer = null;
+slider($('#monVolCtl'), { label: 'Monitor volume', min: 0, max: 1.5, step: 0.05, fmt: (v) => Math.round(v * 100) + '%', def: 1, quiet: true,
+  get: () => state?.monitor?.volume ?? 1,
+  set: (v) => { state.monitor.volume = v; clearTimeout(volTimer); volTimer = setTimeout(() => monitorApi({ volume: v }), 60); } });
+$('#stMonitor').addEventListener('click', async () => {
+  if (!state?.monitor) return;
+  const m = await monitorApi({ on: !state.monitor.on });
+  if (m?.on) { toast('Monitoring. Use headphones, or speakers will feed back.'); setTimeout(ping, 1300); }
+});
+// the test recording plays where the monitor does (Chrome names outputs like Windows does)
+async function routePlayer() {
+  if (!player.setSinkId) return;
+  const name = ($('#outSel').selectedOptions[0]?.textContent || '').replace(/ \(Windows( chat)? default\)$/, '').toLowerCase();
+  const list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput');
+  const hit = name && list.find((d) => d.label.toLowerCase() === name || d.label.toLowerCase().startsWith(name));
+  try { await player.setSinkId(hit ? hit.deviceId : ''); } catch {}
+}
+$('#stTest').addEventListener('click', async () => {
+  if (recorder?.state === 'recording') { recorder.stop(); return; }
+  if (!player.paused) { player.pause(); return; }
+  if (!(await ensureMic())) return;
+  const chunks = [], type = ['audio/webm;codecs=opus', 'audio/webm', ''].find((t) => !t || MediaRecorder.isTypeSupported(t));
+  recorder = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 192000 } : {});
+  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  const label = $('#stTest span'); let left = 5;
+  $('#stTest').classList.add('red');
+  label.textContent = 'Recording 5';
+  const tick = setInterval(() => { left -= 1; if (left > 0) label.textContent = 'Recording ' + left; }, 1000);
+  const stop = setTimeout(() => recorder.state === 'recording' && recorder.stop(), 5000);
+  recorder.onstop = () => {
+    clearInterval(tick); clearTimeout(stop);
+    $('#stTest').classList.remove('red');
+    if (clipUrl) URL.revokeObjectURL(clipUrl);
+    clipUrl = URL.createObjectURL(new Blob(chunks, { type: recorder.mimeType }));
+    player.src = clipUrl; player.play();
+  };
+  recorder.start();
+});
+player.addEventListener('play', () => { $('#stTest span').textContent = 'Playing'; $('#stTest').classList.add('hot'); });
+const resetTest = () => { $('#stTest span').textContent = 'Test'; $('#stTest').classList.remove('hot'); };
+player.addEventListener('pause', resetTest); player.addEventListener('ended', resetTest);
+
+// ============================================================== misc
+let toastTimer = null;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200); }
+let misses = 0, versions = null;
+async function ping() {
+  try {
+    const r = await api('/api/ping');
+    if (misses >= 2 && !state?.dirty) takeState(await api('/api/state'));  // back after an outage: resync
+    misses = 0; $('#offline').hidden = true;
+    if (state?.monitor && r.monitor) { Object.assign(state.monitor, r.monitor); renderMonitor(); }
+    const v = `${r.engine}|${r.page}`;
+    if (versions && v !== versions && !state?.dirty && recorder?.state !== 'recording') location.reload();  // updated: pick it up
+    versions = versions || v;
+  } catch { if (++misses >= 2) $('#offline').hidden = false; }
+}
+setInterval(ping, 3000);
+window.addEventListener('focus', async () => { if (!state || drag || Date.now() - lastEdit < 1500) return; try { takeState(await api('/api/state')); } catch {} });
+window.addEventListener('resize', () => { if (!raf) draw(); });
+window.addEventListener('beforeunload', (e) => { if (state?.dirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('pagehide', () => { fetch('/api/closing', { method: 'POST', keepalive: true, headers: { 'X-Mic-Control': '1' } }).catch(() => {}); });
+
+(async () => {
+  try {
+    catalog = await api('/api/catalog');
+    buildMic();
+    buildGuitar();
+    const pl = $('#plugList');
+    pl.innerHTML = Object.values(catalog).map((p) => `<div${p.installed === false ? ' style="opacity:.45"' : ''}>${esc(p.name)}<span>${esc(p.vendor)} · ${esc(p.category)}${p.latency ? ` · ${(p.latency / 48).toFixed(1)} ms` : ''}${p.installed === false ? ' · not installed (run tools\\get_plugins.py)' : ''}</span></div>`).join('')
+      + '<div>ReaGate<span>Cockos · noise gate</span></div><div>ReaComp<span>Cockos · guitar sustain, zero delay</span></div>';
+    go(page);
+    for (let tries = 0; ; tries++) {  // keep asking until the engine answers (it may be restarting)
+      try { takeState(await api('/api/state')); break; }
+      catch (e) { if (tries === 2) toast('Waiting for Mic Control to respond...'); await new Promise((r) => setTimeout(r, 2000)); }
+    }
+    $('#offline').hidden = true;
+    ping();
+  } catch (e) { toast('Could not reach Mic Control: ' + e.message); $('#offline').hidden = false; }
+})();
+</script>
+</body>
+</html>

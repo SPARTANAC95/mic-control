@@ -1,0 +1,4 @@
+﻿ReaComp and ReaGate (ReaPlugs Edition 2.36, 64-bit) by Cockos Incorporated, https://www.reaper.fm/reaplugs/
+Free to use. Extracted unmodified from reaplugs236_x64-install.exe
+(SHA-256 1654F1F78D746FC87A6F6D078A8F928EA61C7B49997B1F2C07DFC870F8FA6C10, Authenticode-signed by Cockos Incorporated).
+Mic Control copies these into Equalizer APO's config\MicControl\plugins folder, where the Windows audio service can load them.
